@@ -9,6 +9,7 @@
 #include <dpp/dpp.h>
 #include <nlohmann/json.hpp>
 #include <cpr/cpr.h>
+#include "fun_commands.h"
 
 using json = nlohmann::json;
 
@@ -239,8 +240,26 @@ private:
                     .set_required(false)
             );
             
-            // Create global application command
+            // Register once per process, including after gateway reconnects.
+            if (!dpp::run_once<struct register_bot_commands>()) {
+                return;
+            }
             bot.global_command_create(meme_command);
+            bot.global_command_create(dpp::slashcommand(
+                "help", "See all meme bot commands", bot.me.id));
+            bot.global_command_create(dpp::slashcommand(
+                "coinflip", "Let a coin settle it: heads or tails", bot.me.id));
+
+            dpp::slashcommand roll_command("roll", "Roll a die (default: 6 sides)", bot.me.id);
+            roll_command.add_option(dpp::command_option(
+                dpp::co_integer, "sides", "Number of sides, from 2 to 100", false)
+                .set_min_value(int64_t{2}).set_max_value(int64_t{100}));
+            bot.global_command_create(roll_command);
+
+            dpp::slashcommand ball_command("8ball", "Ask the meme oracle a yes-or-no question", bot.me.id);
+            ball_command.add_option(dpp::command_option(
+                dpp::co_string, "question", "Your yes-or-no question", true));
+            bot.global_command_create(ball_command);
             
             // Start cache refresh thread
             refresh_meme_cache();
@@ -250,7 +269,50 @@ private:
         
         // Handle slash commands
         bot.on_slashcommand([this](const dpp::slashcommand_t& event) {
-            if (event.command.get_command_name() == "meme") {
+            const auto command = event.command.get_command_name();
+            // Each event thread owns its generator; concurrent commands share no RNG state.
+            thread_local std::mt19937 generator(std::random_device{}());
+            if (command == "help") {
+                dpp::embed help;
+                help.set_title("🎭 Meme Bot • Command Menu");
+                help.set_color(0x8B5CF6);
+                help.set_description(
+                    "**/meme** — Get a random SFW meme.\n"
+                    "**/meme subreddit:<name>** — Pick a configured subreddit.\n"
+                    "**/coinflip** — Heads or tails? Let fate decide.\n"
+                    "**/roll [sides]** — Roll a die with 2–100 sides (default: 6).\n"
+                    "**/8ball question:<question>** — Ask the meme oracle. Just for fun!\n"
+                    "**/help** — Show this menu.");
+                event.reply(dpp::message().add_embed(help).set_flags(dpp::m_ephemeral));
+                return;
+            }
+            if (command == "coinflip") {
+                event.reply("🪙 The coin says **" + fun_commands::coinflip(generator) + "**!");
+                return;
+            }
+            if (command == "roll") {
+                const auto parameter = event.get_parameter("sides");
+                const int64_t sides = std::holds_alternative<int64_t>(parameter)
+                    ? std::get<int64_t>(parameter) : 6;
+                if (sides < 2 || sides > 100) {
+                    event.reply(dpp::message("Choose between 2 and 100 sides.").set_flags(dpp::m_ephemeral));
+                    return;
+                }
+                event.reply("🎲 You rolled **" + std::to_string(fun_commands::roll(static_cast<int>(sides), generator))
+                    + "** on a **d" + std::to_string(sides) + "**!");
+                return;
+            }
+            if (command == "8ball") {
+                const auto parameter = event.get_parameter("question");
+                if (!std::holds_alternative<std::string>(parameter)
+                    || std::get<std::string>(parameter).find_first_not_of(" \t\r\n") == std::string::npos) {
+                    event.reply(dpp::message("Ask me a yes-or-no question first!").set_flags(dpp::m_ephemeral));
+                    return;
+                }
+                event.reply("🎱 " + fun_commands::eight_ball(generator));
+                return;
+            }
+            if (command == "meme") {
                 // Get subreddit parameter if provided
                 std::string subreddit = "";
                 if (event.get_parameter("subreddit").index() != 0) {

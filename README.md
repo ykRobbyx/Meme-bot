@@ -64,6 +64,17 @@ Once the bot is running and has been added to your Discord server, you can use t
 - `/meme` - Get a random meme from any of the configured subreddits
 - `/meme subreddit:programmerhumor` - Get a meme specifically from r/programmerhumor (or any other subreddit in your config)
 
+### More ways to play
+
+- `/help` — Show a private command menu.
+- `/coinflip` — Flip a coin and share heads or tails with the channel.
+- `/roll` — Roll a six-sided die.
+- `/roll sides:20` — Roll a custom die with 2–100 sides.
+- `/8ball question:Will we win tonight?` — Get a playful answer from the meme oracle.
+
+The fun commands work independently of the Reddit meme cache. Restart the bot
+with the updated code to register them; Discord may take time to show new global commands.
+
 ## 🧩 Dependencies
 
 - [D++](https://github.com/brainboxdotcc/DPP) - Discord API wrapper for C++
